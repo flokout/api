@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flokout API Testing Interface</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .form-row input {
+            flex: 1;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 60px;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.secondary {
+            background-color: #6c757d;
+        }
+        button.secondary:hover {
+            background-color: #545b62;
+        }
+        button.danger {
+            background-color: #dc3545;
+        }
+        button.danger:hover {
+            background-color: #c82333;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .success {
+            color: #28a745;
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        .tab.active {
+            border-bottom-color: #007bff;
+            color: #007bff;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .section {
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .section h4 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .stored-data {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Flokout API Testing Interface</h1>
+        <p>Complete API testing for authentication, floks, spots, flokouts, and RSVPs</p>
+        
+        <div class="stored-data" id="storedData">
+            <strong>Stored Data:</strong><br>
+            Access Token: <span id="accessTokenDisplay">None</span><br>
+            Current User ID: <span id="currentUserId">None</span><br>
+            Current Flok ID: <span id="currentFlokId">None</span><br>
+            Current Spot ID: <span id="currentSpotId">None</span><br>
+            Current Flokout ID: <span id="currentFlokoutId">None</span>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('auth')">🔐 Authentication</div>
+            <div class="tab" onclick="switchTab('floks')">👥 Floks</div>
+            <div class="tab" onclick="switchTab('spots')">📍 Spots</div>
+            <div class="tab" onclick="switchTab('flokouts')">🎉 Flokouts</div>
+            <div class="tab" onclick="switchTab('rsvps')">✅ RSVPs</div>
+            <div class="tab" onclick="switchTab('attendance')">👥 Attendance</div>
+            <div class="tab" onclick="switchTab('expenses')">💰 Expenses</div>
+        </div>
+
+        <!-- Authentication Tab -->
+        <div id="auth" class="tab-content active">
+            <div class="section">
+                <h4>Register</h4>
+                <div class="form-row">
+                    <input type="email" id="register-email" placeholder="Email">
+                    <input type="text" id="register-full-name" placeholder="Full Name">
+                    <input type="password" id="register-password" placeholder="Password">
+                </div>
+                <button onclick="register()">Register</button>
+            </div>
+
+            <div class="section">
+                <h4>Login</h4>
+                <div class="form-row">
+                    <input type="email" id="login-email" placeholder="Email">
+                    <input type="password" id="login-password" placeholder="Password">
+                </div>
+                <button onclick="login()">Login</button>
+            </div>
+
+            <div class="section">
+                <h4>User Profile & Auth</h4>
+                <button onclick="getProfile()">Get Profile</button>
+                <button onclick="refreshToken()">Refresh Token</button>
+                <button onclick="logout()" class="danger">Logout</button>
+            </div>
+        </div>
+
+        <!-- Floks Tab -->
+        <div id="floks" class="tab-content">
+            <div class="section">
+                <h4>Create Flok</h4>
+                <input type="text" id="flok-name" placeholder="Flok Name">
+                <button onclick="createFlok()">Create Flok</button>
+            </div>
+
+            <div class="section">
+                <h4>Flok Management</h4>
+                <button onclick="getUserFloks()">Get My Floks</button>
+                <div class="form-row">
+                    <input type="text" id="flok-id-input" placeholder="Flok ID">
+                    <button onclick="getFlokById()">Get Flok Details</button>
+                    <button onclick="getFlokMembers()">Get Members</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h4>Flok Invites</h4>
+                <div class="form-row">
+                    <input type="text" id="invite-flok-id" placeholder="Flok ID">
+                    <input type="number" id="invite-expires-days" placeholder="Expires in days" value="7">
+                    <button onclick="createInvite()">Create Invite</button>
+                </div>
+                <div class="form-row">
+                    <input type="text" id="join-flok-id" placeholder="Flok ID">
+                    <input type="text" id="invite-code" placeholder="Invite Code">
+                    <button onclick="joinFlok()">Join Flok</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Spots Tab -->
+        <div id="spots" class="tab-content">
+            <div class="section">
+                <h4>Create Spot</h4>
+                <input type="text" id="spot-name" placeholder="Spot Name" style="margin-bottom: 10px;">
+                <input type="text" id="spot-address" placeholder="Address" style="margin-bottom: 10px;">
+                <div class="form-row">
+                    <input type="number" id="spot-cost" placeholder="Cost per hour">
+                    <input type="text" id="spot-contact" placeholder="Contact Number">
+                    <input type="text" id="spot-flok-id" placeholder="Flok ID (optional)">
+                </div>
+                <input type="text" id="spot-tags" placeholder="Tags (comma separated)" style="margin-bottom: 10px;">
+                <button onclick="createSpot()">Create Spot</button>
+            </div>
+
+            <div class="section">
+                <h4>Spot Management</h4>
+                <button onclick="getSpots()">Get All Spots</button>
+                <div class="form-row">
+                    <input type="text" id="search-query" placeholder="Search Query">
+                    <button onclick="searchSpots()">Search Spots</button>
+                </div>
+                <div class="form-row">
+                    <input type="text" id="spot-id-input" placeholder="Spot ID">
+                    <button onclick="getSpotById()">Get Spot Details</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flokouts Tab -->
+        <div id="flokouts" class="tab-content">
+            <div class="section">
+                <h4>Create Flokout</h4>
+                <input type="text" id="flokout-title" placeholder="Flokout Title" style="margin-bottom: 10px;">
+                <textarea id="flokout-description" placeholder="Description"></textarea>
+                <div class="form-row">
+                    <input type="datetime-local" id="flokout-date" placeholder="Date & Time">
+                    <input type="text" id="flokout-flok-id" placeholder="Flok ID">
+                    <input type="text" id="flokout-spot-id" placeholder="Spot ID (optional)">
+                </div>
+                <div class="form-row">
+                    <input type="number" id="flokout-min-people" placeholder="Min People Required" value="2">
+                    <select id="flokout-status">
+                        <option value="poll">Poll</option>
+                        <option value="confirmed">Confirmed</option>
+                    </select>
+                </div>
+                <button onclick="createFlokout()">Create Flokout</button>
+            </div>
+
+            <div class="section">
+                <h4>Flokout Management</h4>
+                <button onclick="getFlokouts()">Get All Flokouts</button>
+                <button onclick="getUserCreatedFlokouts()">My Created Flokouts</button>
+                <button onclick="getUserAttendingFlokouts()">Flokouts I'm Attending</button>
+                
+                <div class="form-row">
+                    <input type="text" id="flokout-id-input" placeholder="Flokout ID">
+                    <button onclick="getFlokoutById()">Get Flokout Details</button>
+                </div>
+
+                <div class="form-row">
+                    <select id="flokout-status-update">
+                        <option value="poll">Poll</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                    <button onclick="updateFlokoutStatus()">Update Status</button>
+                    <button onclick="confirmFlokout()">Confirm Flokout</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- RSVPs Tab -->
+        <div id="rsvps" class="tab-content">
+            <div class="section">
+                <h4>RSVP to Flokout</h4>
+                <div class="form-group">
+                    <label for="rsvp-flokout-id">Flokout ID:</label>
+                    <input type="text" id="rsvp-flokout-id" placeholder="Enter Flokout ID">
+                </div>
+                <div class="form-row">
+                    <select id="rsvp-response">
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                        <option value="maybe">Maybe</option>
+                    </select>
+                    <button onclick="createOrUpdateRSVP()">RSVP</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h4>RSVP Management</h4>
+                <button onclick="getUserRSVPs()">Get My RSVPs</button>
+                
+                <div class="form-group">
+                    <label for="rsvp-check-flokout-id">Flokout ID:</label>
+                    <input type="text" id="rsvp-check-flokout-id" placeholder="Enter Flokout ID">
+                </div>
+                <div class="form-row">
+                    <button onclick="getFlokoutRSVPs()">Get Flokout RSVPs</button>
+                    <button onclick="getUserRSVPForFlokout()">Get My RSVP for Flokout</button>
+                    <button onclick="removeRSVP()" class="danger">Remove My RSVP</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attendance Tab -->
+        <div id="attendance" class="tab-content">
+            <div class="section">
+                <h4>Mark Attendance</h4>
+                <div class="form-group">
+                    <label for="attendance-flokout-id">Flokout ID:</label>
+                    <input type="text" id="attendance-flokout-id" placeholder="Enter Flokout ID">
+                </div>
+                <div class="form-group">
+                    <label for="attendance-user-id">User ID (leave blank for yourself):</label>
+                    <div class="form-row">
+                        <input type="text" id="attendance-user-id" placeholder="User ID (optional)">
+                        <button type="button" onclick="fillCurrentUserId('attendance-user-id')" class="secondary">Use Me</button>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <select id="attendance-status">
+                        <option value="true">Attended</option>
+                        <option value="false">Did Not Attend</option>
+                    </select>
+                    <button onclick="markAttendance()">Mark Attendance</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h4>View Attendance</h4>
+                <div class="form-group">
+                    <label for="view-attendance-flokout-id">Flokout ID:</label>
+                    <input type="text" id="view-attendance-flokout-id" placeholder="Enter Flokout ID">
+                </div>
+                <button onclick="getFlokoutAttendance()">Get Flokout Attendance</button>
+                <button onclick="getUserAttendanceHistory()">Get My Attendance History</button>
+            </div>
+
+            <div class="section">
+                <h4>Bulk Mark Attendance (Admin Only)</h4>
+                <div class="form-group">
+                    <label for="bulk-flokout-id">Flokout ID:</label>
+                    <input type="text" id="bulk-flokout-id" placeholder="Enter Flokout ID">
+                </div>
+                <div class="form-group">
+                    <label for="bulk-attendees">Attendees (JSON format):</label>
+                    <textarea id="bulk-attendees" placeholder='[{"user_id": "123", "attended": true}, {"user_id": "456", "attended": false}]'></textarea>
+                </div>
+                <button onclick="bulkMarkAttendance()">Bulk Mark Attendance</button>
+            </div>
+        </div>
+
+        <!-- Expenses Tab -->
+        <div id="expenses" class="tab-content">
+            <div class="section">
+                <h4>Create Expense</h4>
+                <div class="form-group">
+                    <label for="expense-description">Description:</label>
+                    <input type="text" id="expense-description" placeholder="Expense Description">
+                </div>
+                <div class="form-row">
+                    <input type="number" id="expense-amount" placeholder="Amount" step="0.01">
+                    <select id="expense-category">
+                        <option value="court">Court/Venue</option>
+                        <option value="equipment">Equipment</option>
+                        <option value="food">Food & Drinks</option>
+                        <option value="transportation">Transportation</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="expense-flokout-id">Flokout ID:</label>
+                    <input type="text" id="expense-flokout-id" placeholder="Enter Flokout ID">
+                </div>
+                <div class="form-group">
+                    <label for="expense-paid-by">Paid By (User ID):</label>
+                    <div class="form-row">
+                        <input type="text" id="expense-paid-by" placeholder="Enter User ID">
+                        <button type="button" onclick="fillCurrentUserId('expense-paid-by')" class="secondary">Use Me</button>
+                    </div>
+                </div>
+                <button onclick="createExpense()">Create Expense</button>
+            </div>
+
+            <div class="section">
+                <h4>Expense Management</h4>
+                <button onclick="getExpenses()">Get All Expenses</button>
+                
+                <div class="form-group">
+                    <label for="expense-id-input">Expense ID:</label>
+                    <input type="text" id="expense-id-input" placeholder="Enter Expense ID">
+                </div>
+                <div class="form-row">
+                    <button onclick="getExpenseById()">Get Expense Details</button>
+                    <button onclick="getExpenseShares()">Get Expense Shares</button>
+                </div>
+
+                <h5>Filter Expenses</h5>
+                <div class="form-group">
+                    <label for="filter-flok-id">Flok ID:</label>
+                    <input type="text" id="filter-flok-id" placeholder="Filter by Flok ID">
+                </div>
+                <div class="form-group">
+                    <label for="filter-flokout-id">Flokout ID:</label>
+                    <input type="text" id="filter-flokout-id" placeholder="Filter by Flokout ID">
+                </div>
+                <div class="form-row">
+                    <select id="filter-category">
+                        <option value="">All Categories</option>
+                        <option value="court">Court/Venue</option>
+                        <option value="equipment">Equipment</option>
+                        <option value="food">Food & Drinks</option>
+                        <option value="transportation">Transportation</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <button onclick="getExpensesFiltered()">Get Filtered Expenses</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h4>Settle Up Functionality</h4>
+                <button onclick="getSettleUp()">Calculate Settle Up</button>
+                
+                <div style="margin-top: 15px;">
+                    <h5>Mark Payment as Sent</h5>
+                    <div class="form-group">
+                        <label for="sent-expense-share-ids">Expense Share IDs (comma separated):</label>
+                        <input type="text" id="sent-expense-share-ids" placeholder="Enter Expense Share IDs">
+                    </div>
+                    <div class="form-row">
+                        <select id="payment-method">
+                            <option value="venmo">Venmo</option>
+                            <option value="zelle">Zelle</option>
+                            <option value="cash">Cash</option>
+                            <option value="other">Other</option>
+                        </select>
+                        <button onclick="markAsSent()">Mark as Sent</button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <h5>Mark Payment as Received</h5>
+                    <div class="form-group">
+                        <label for="received-expense-share-ids">Expense Share IDs (comma separated):</label>
+                        <input type="text" id="received-expense-share-ids" placeholder="Enter Expense Share IDs">
+                    </div>
+                    <button onclick="markAsReceived()">Mark as Received</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h4>Update/Delete Expense</h4>
+                <div class="form-group">
+                    <label for="update-expense-id">Expense ID:</label>
+                    <input type="text" id="update-expense-id" placeholder="Enter Expense ID">
+                </div>
+                <div class="form-row">
+                    <input type="text" id="update-description" placeholder="New Description">
+                    <input type="number" id="update-amount" placeholder="New Amount" step="0.01">
+                </div>
+                <div class="form-row">
+                    <select id="update-category">
+                        <option value="">Keep Current Category</option>
+                        <option value="court">Court/Venue</option>
+                        <option value="equipment">Equipment</option>
+                        <option value="food">Food & Drinks</option>
+                        <option value="transportation">Transportation</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <button onclick="updateExpense()">Update Expense</button>
+                    <button onclick="deleteExpense()" class="danger">Delete Expense</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="response" id="response"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        let accessToken = localStorage.getItem('accessToken');
+        let refreshTokenValue = localStorage.getItem('refreshToken');
+        let currentFlokId = localStorage.getItem('currentFlokId');
+        let currentSpotId = localStorage.getItem('currentSpotId');
+        let currentFlokoutId = localStorage.getItem('currentFlokoutId');
+
+        function updateStoredDataDisplay() {
+            document.getElementById('accessTokenDisplay').textContent = accessToken ? 'Set' : 'None';
+            document.getElementById('currentUserId').textContent = localStorage.getItem('userId') || 'None';
+            document.getElementById('currentFlokId').textContent = currentFlokId || 'None';
+            document.getElementById('currentSpotId').textContent = currentSpotId || 'None';
+            document.getElementById('currentFlokoutId').textContent = currentFlokoutId || 'None';
+        }
+
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function showResponse(data, isError = false) {
+            const responseDiv = document.getElementById('response');
+            responseDiv.textContent = JSON.stringify(data, null, 2);
+            responseDiv.className = 'response ' + (isError ? 'error' : 'success');
+            
+            // Auto-extract IDs for easy testing
+            if (!isError && data) {
+                if (data.flok && data.flok.id) {
+                    currentFlokId = data.flok.id;
+                    localStorage.setItem('currentFlokId', currentFlokId);
+                    document.getElementById('flok-id-input').value = currentFlokId;
+                    document.getElementById('flokout-flok-id').value = currentFlokId;
+                }
+                if (data.spot && data.spot.id) {
+                    currentSpotId = data.spot.id;
+                    localStorage.setItem('currentSpotId', currentSpotId);
+                    document.getElementById('spot-id-input').value = currentSpotId;
+                    document.getElementById('flokout-spot-id').value = currentSpotId;
+                }
+                if (data.flokout && data.flokout.id) {
+                    currentFlokoutId = data.flokout.id;
+                    localStorage.setItem('currentFlokoutId', currentFlokoutId);
+                    document.getElementById('flokout-id-input').value = currentFlokoutId;
+                    document.getElementById('rsvp-flokout-id').value = currentFlokoutId;
+                    document.getElementById('rsvp-check-flokout-id').value = currentFlokoutId;
+                    document.getElementById('attendance-flokout-id').value = currentFlokoutId;
+                    document.getElementById('view-attendance-flokout-id').value = currentFlokoutId;
+                    document.getElementById('bulk-flokout-id').value = currentFlokoutId;
+                }
+            }
+            
+            updateStoredDataDisplay();
+        }
+
+        async function makeAuthenticatedRequest(url, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            
+            if (accessToken) {
+                headers['Authorization'] = `Bearer ${accessToken}`;
+            }
+            
+            return fetch(url, {
+                ...options,
+                headers
+            });
+        }
+
+        // ===== HELPER FUNCTIONS =====
+        function fillCurrentUserId(inputId) {
+            const userId = localStorage.getItem('userId');
+            if (userId) {
+                document.getElementById(inputId).value = userId;
+            } else {
+                alert('User ID not available. Please login first or get your profile.');
+            }
+        }
+
+        // ===== AUTHENTICATION =====
+        async function register() {
+            try {
+                const email = document.getElementById('register-email').value;
+                const fullName = document.getElementById('register-full-name').value;
+                const password = document.getElementById('register-password').value;
+
+                const response = await fetch(`${API_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, full_name: fullName }),
+                });
+
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function login() {
+            try {
+                const email = document.getElementById('login-email').value;
+                const password = document.getElementById('login-password').value;
+
+                const response = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    localStorage.setItem('accessToken', data.access_token);
+                    localStorage.setItem('refreshToken', data.refresh_token);
+                    accessToken = data.access_token;
+                    refreshTokenValue = data.refresh_token;
+                    
+                    // Extract and store user ID from token or response
+                    if (data.user && data.user.id) {
+                        localStorage.setItem('userId', data.user.id);
+                    } else {
+                        // Get user profile to extract user ID
+                        try {
+                            const profileResponse = await makeAuthenticatedRequest(`${API_URL}/auth/me`);
+                            const profileData = await profileResponse.json();
+                            if (profileResponse.ok && profileData.user && profileData.user.id) {
+                                localStorage.setItem('userId', profileData.user.id);
+                            }
+                        } catch (profileError) {
+                            console.log('Could not fetch user profile for ID');
+                        }
+                    }
+                    
+                    updateStoredDataDisplay();
+                }
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getProfile() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/auth/me`);
+                const data = await response.json();
+                
+                // Store user ID if successful and not already stored
+                if (response.ok && data.user && data.user.id && !localStorage.getItem('userId')) {
+                    localStorage.setItem('userId', data.user.id);
+                    updateStoredDataDisplay();
+                }
+                
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function logout() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/auth/logout`, { method: 'POST' });
+                const data = await response.json();
+                if (response.ok) {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('refreshToken');
+                    localStorage.removeItem('userId');
+                    accessToken = null;
+                    refreshTokenValue = null;
+                    updateStoredDataDisplay();
+                }
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function refreshToken() {
+            try {
+                const response = await fetch(`${API_URL}/auth/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refresh_token: refreshTokenValue }),
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    localStorage.setItem('accessToken', data.access_token);
+                    localStorage.setItem('refreshToken', data.refresh_token);
+                    accessToken = data.access_token;
+                    refreshTokenValue = data.refresh_token;
+                    updateStoredDataDisplay();
+                }
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        // ===== FLOKS =====
+        async function createFlok() {
+            try {
+                const name = document.getElementById('flok-name').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/floks`, {
+                    method: 'POST',
+                    body: JSON.stringify({ name })
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getUserFloks() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/floks`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getFlokById() {
+            try {
+                const id = document.getElementById('flok-id-input').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/floks/${id}`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getFlokMembers() {
+            try {
+                const id = document.getElementById('flok-id-input').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/floks/${id}/members`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function createInvite() {
+            try {
+                const flokId = document.getElementById('invite-flok-id').value;
+                const expiresInDays = document.getElementById('invite-expires-days').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/floks/${flokId}/invites`, {
+                    method: 'POST',
+                    body: JSON.stringify({ expires_in_days: parseInt(expiresInDays) })
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function joinFlok() {
+            try {
+                const flokId = document.getElementById('join-flok-id').value;
+                const inviteCode = document.getElementById('invite-code').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/floks/${flokId}/join`, {
+                    method: 'POST',
+                    body: JSON.stringify({ invite_code: inviteCode })
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        // ===== SPOTS =====
+        async function createSpot() {
+            try {
+                const name = document.getElementById('spot-name').value;
+                const address = document.getElementById('spot-address').value;
+                const costPerHour = document.getElementById('spot-cost').value;
+                const contactNumber = document.getElementById('spot-contact').value;
+                const flokId = document.getElementById('spot-flok-id').value;
+                const tags = document.getElementById('spot-tags').value.split(',').map(t => t.trim()).filter(t => t);
+
+                const response = await makeAuthenticatedRequest(`${API_URL}/spots`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        name,
+                        address: address || null,
+                        cost_per_hour: costPerHour ? parseFloat(costPerHour) : null,
+                        contact_number: contactNumber || null,
+                        flok_id: flokId || null,
+                        tags
+                    })
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getSpots() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/spots`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function searchSpots() {
+            try {
+                const query = document.getElementById('search-query').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/spots/search/${encodeURIComponent(query)}`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getSpotById() {
+            try {
+                const id = document.getElementById('spot-id-input').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/spots/${id}`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        // ===== FLOKOUTS =====
+        async function createFlokout() {
+            try {
+                const title = document.getElementById('flokout-title').value;
+                const description = document.getElementById('flokout-description').value;
+                const date = document.getElementById('flokout-date').value;
+                const flokId = document.getElementById('flokout-flok-id').value;
+                const spotId = document.getElementById('flokout-spot-id').value;
+                const minPeople = document.getElementById('flokout-min-people').value;
+                const status = document.getElementById('flokout-status').value;
+
+                const response = await makeAuthenticatedRequest(`${API_URL}/flokouts`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        title,
+                        description: description || null,
+                        date,
+                        flok_id: flokId,
+                        spot_id: spotId || null,
+                        min_people_required: parseInt(minPeople),
+                        status
+                    })
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getFlokouts() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/flokouts`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getUserCreatedFlokouts() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/flokouts/user/created`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getUserAttendingFlokouts() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/flokouts/user/attending`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getFlokoutById() {
+            try {
+                const id = document.getElementById('flokout-id-input').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/flokouts/${id}`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function updateFlokoutStatus() {
+            try {
+                const id = document.getElementById('flokout-id-input').value;
+                const status = document.getElementById('flokout-status-update').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/flokouts/${id}/status`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ status })
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function confirmFlokout() {
+            try {
+                const id = document.getElementById('flokout-id-input').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/flokouts/${id}/confirm`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        // ===== RSVPs =====
+        async function createOrUpdateRSVP() {
+            try {
+                const flokoutId = document.getElementById('rsvp-flokout-id').value;
+                const response = document.getElementById('rsvp-response').value;
+                const apiResponse = await makeAuthenticatedRequest(`${API_URL}/rsvps/flokout/${flokoutId}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ response })
+                });
+                const data = await apiResponse.json();
+                showResponse(data, !apiResponse.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getUserRSVPs() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/rsvps/user/rsvps`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getFlokoutRSVPs() {
+            try {
+                const flokoutId = document.getElementById('rsvp-check-flokout-id').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/rsvps/flokout/${flokoutId}`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getUserRSVPForFlokout() {
+            try {
+                const flokoutId = document.getElementById('rsvp-check-flokout-id').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/rsvps/user/rsvp/${flokoutId}`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function removeRSVP() {
+            try {
+                const flokoutId = document.getElementById('rsvp-check-flokout-id').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/rsvps/flokout/${flokoutId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        // ===== ATTENDANCE =====
+        async function markAttendance() {
+            try {
+                const flokoutId = document.getElementById('attendance-flokout-id').value;
+                const userId = document.getElementById('attendance-user-id').value;
+                const attended = document.getElementById('attendance-status').value === 'true';
+
+                const requestBody = { attended };
+                if (userId) {
+                    requestBody.user_id = userId;
+                }
+
+                const response = await makeAuthenticatedRequest(`${API_URL}/attendance/flokout/${flokoutId}/mark`, {
+                    method: 'POST',
+                    body: JSON.stringify(requestBody)
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getFlokoutAttendance() {
+            try {
+                const flokoutId = document.getElementById('view-attendance-flokout-id').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/attendance/flokout/${flokoutId}`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getUserAttendanceHistory() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/attendance/user/history`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function bulkMarkAttendance() {
+            try {
+                const flokoutId = document.getElementById('bulk-flokout-id').value;
+                const attendeesText = document.getElementById('bulk-attendees').value;
+                
+                let attendees;
+                try {
+                    attendees = JSON.parse(attendeesText);
+                } catch (parseError) {
+                    showResponse({ error: 'Invalid JSON format for attendees' }, true);
+                    return;
+                }
+
+                const response = await makeAuthenticatedRequest(`${API_URL}/attendance/flokout/${flokoutId}/bulk`, {
+                    method: 'POST',
+                    body: JSON.stringify({ attendees })
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        // ===== EXPENSES =====
+        async function createExpense() {
+            try {
+                const description = document.getElementById('expense-description').value;
+                const amount = document.getElementById('expense-amount').value;
+                const category = document.getElementById('expense-category').value;
+                const flokoutId = document.getElementById('expense-flokout-id').value;
+                const paidBy = document.getElementById('expense-paid-by').value;
+
+                const response = await makeAuthenticatedRequest(`${API_URL}/expenses`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        description,
+                        amount: parseFloat(amount),
+                        category,
+                        flokout_id: flokoutId,
+                        paid_by: paidBy
+                    })
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getExpenses() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/expenses`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getExpensesFiltered() {
+            try {
+                const flokId = document.getElementById('filter-flok-id').value;
+                const flokoutId = document.getElementById('filter-flokout-id').value;
+                const category = document.getElementById('filter-category').value;
+
+                let url = `${API_URL}/expenses?`;
+                if (flokId) url += `flok_id=${flokId}&`;
+                if (flokoutId) url += `flokout_id=${flokoutId}&`;
+                if (category) url += `category=${category}&`;
+
+                const response = await makeAuthenticatedRequest(url);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getExpenseById() {
+            try {
+                const id = document.getElementById('expense-id-input').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/expenses/${id}`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getExpenseShares() {
+            try {
+                const id = document.getElementById('expense-id-input').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/expenses/${id}/shares`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function updateExpense() {
+            try {
+                const id = document.getElementById('update-expense-id').value;
+                const description = document.getElementById('update-description').value;
+                const amount = document.getElementById('update-amount').value;
+                const category = document.getElementById('update-category').value;
+
+                const updateData = {};
+                if (description) updateData.description = description;
+                if (amount) updateData.amount = parseFloat(amount);
+                if (category) updateData.category = category;
+
+                const response = await makeAuthenticatedRequest(`${API_URL}/expenses/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(updateData)
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function deleteExpense() {
+            try {
+                const id = document.getElementById('update-expense-id').value;
+                const response = await makeAuthenticatedRequest(`${API_URL}/expenses/${id}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function getSettleUp() {
+            try {
+                const response = await makeAuthenticatedRequest(`${API_URL}/expenses/settle-up/calculate`);
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function markAsSent() {
+            try {
+                const shareIds = document.getElementById('sent-expense-share-ids').value.split(',').map(id => id.trim());
+                const paymentMethod = document.getElementById('payment-method').value;
+
+                const response = await makeAuthenticatedRequest(`${API_URL}/expenses/settle-up/mark-sent`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        expense_share_ids: shareIds,
+                        payment_method: paymentMethod
+                    })
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        async function markAsReceived() {
+            try {
+                const shareIds = document.getElementById('received-expense-share-ids').value.split(',').map(id => id.trim());
+
+                const response = await makeAuthenticatedRequest(`${API_URL}/expenses/settle-up/mark-received`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        expense_share_ids: shareIds
+                    })
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+            }
+        }
+
+        // Initialize
+        updateStoredDataDisplay();
+    </script>
+</body>
+</html> 
