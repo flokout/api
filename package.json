@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "PORT=3000 nodemon src/app.ts",
     "build": "tsc",
+    "build:verify": "npm run build && node scripts/verify-build.js",
     "start": "node dist/app.js",
     "test": "jest",
     "test:watch": "jest --watch",

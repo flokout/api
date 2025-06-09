@@ -3,7 +3,7 @@ services:
     name: flokout-api
     env: node
     plan: starter
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci && npm run build && node scripts/verify-build.js
     startCommand: npm start
     healthCheckPath: /health
     rootDir: api-server
@@ -25,4 +25,10 @@ services:
       - key: MAX_FILE_SIZE
         value: 10485760
       - key: LOG_LEVEL
-        value: info 
+        value: info
+      - key: SUPABASE_URL
+        value: YOUR_SUPABASE_URL_HERE
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        value: YOUR_SUPABASE_SERVICE_ROLE_KEY_HERE
+      - key: SUPABASE_ANON_KEY
+        value: YOUR_SUPABASE_ANON_KEY_HERE 
