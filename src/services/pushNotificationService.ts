@@ -22,21 +22,29 @@ export class PushNotificationService {
     data?: any
   ): Promise<boolean> {
     try {
+      console.log(`🔔 Looking for push token for user: ${userId}`);
+      
       // Get user's push token from database
       const { data: user, error } = await supabaseClient
-        .from('users')
+        .from('profiles')
         .select('push_token, platform')
         .eq('id', userId)
         .single();
 
-      if (error || !user?.push_token) {
-        console.log(`No push token found for user ${userId}`);
+      if (error) {
+        console.error(`🔔 Database error getting push token for user ${userId}:`, error);
         return false;
       }
 
+      if (!user?.push_token) {
+        console.log(`🔔 No push token found for user ${userId}`);
+        return false;
+      }
+
+      console.log(`🔔 Found push token for user ${userId}, platform: ${user.platform}`);
       return await this.sendNotification(user.push_token, title, body, data);
     } catch (error) {
-      console.error('Error sending push notification to user:', error);
+      console.error('🔔 Error sending push notification to user:', error);
       return false;
     }
   }
@@ -53,7 +61,7 @@ export class PushNotificationService {
     try {
       // Get push tokens for all users
       const { data: users, error } = await supabaseClient
-        .from('users')
+        .from('profiles')
         .select('push_token, platform')
         .in('id', userIds)
         .not('push_token', 'is', null);

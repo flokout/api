@@ -116,9 +116,13 @@ app.get('/api', (req, res) => {
         get: 'GET /api/floks/:id',
         update: 'PUT /api/floks/:id',
         delete: 'DELETE /api/floks/:id',
+        reactivate: 'PUT /api/floks/:id/reactivate',
+        purge: 'DELETE /api/floks/:id/purge',
         members: 'GET /api/floks/:id/members',
         join: 'POST /api/floks/:id/join',
         leave: 'POST /api/floks/:id/leave',
+        associateSpot: 'POST /api/floks/:id/spots',
+        disassociateSpot: 'DELETE /api/floks/:id/spots/:spotId',
         createInvite: 'POST /api/floks/:id/invites',
         getInvites: 'GET /api/floks/:id/invites'
       },

@@ -303,9 +303,9 @@ export class NotificationController {
         return;
       }
 
-      // Store or update push token in users table
+      // Store or update push token in profiles table
       const { error: updateError } = await supabaseClient
-        .from('users')
+        .from('profiles')
         .update({
           push_token,
           platform,

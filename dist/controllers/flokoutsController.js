@@ -22,6 +22,7 @@ class FlokoutsController {
                 .select('flok_id')
                 .eq('user_id', req.user.id);
             const userFlokIds = userFloks?.map(f => f.flok_id) || [];
+            console.log(`[DEBUG] User ${req.user.id} belongs to ${userFlokIds.length} floks:`, userFlokIds);
             if (userFlokIds.length === 0) {
                 res.json({ flokouts: [] });
                 return;
@@ -41,8 +42,11 @@ class FlokoutsController {
           )
         `)
                 .in('flok_id', userFlokIds)
-                .order('date', { ascending: true })
-                .range(Number(offset), Number(offset) + Number(limit) - 1);
+                .order('date', { ascending: true });
+            // Only apply range if limit is reasonable (< 1000)
+            if (Number(limit) < 1000) {
+                query = query.range(Number(offset), Number(offset) + Number(limit) - 1);
+            }
             if (flok_id) {
                 query = query.eq('flok_id', flok_id);
             }
@@ -51,26 +55,42 @@ class FlokoutsController {
             }
             const { data: flokouts, error: flokoutsError } = await query;
             if (flokoutsError) {
+                console.error('[DEBUG] Error fetching flokouts:', flokoutsError);
                 res.status(500).json({ error: 'Failed to fetch flokouts' });
                 return;
             }
+            console.log(`[DEBUG] Found ${flokouts?.length || 0} flokouts for user ${req.user.id}`);
+            if (flokouts && flokouts.length > 0) {
+                const statusCounts = flokouts.reduce((acc, f) => {
+                    acc[f.status] = (acc[f.status] || 0) + 1;
+                    return acc;
+                }, {});
+                console.log('[DEBUG] Flokouts by status:', statusCounts);
+            }
             // For each flokout, get RSVP data and flok members (for poll status)
             const flokoutsWithRSVPData = await Promise.all((flokouts || []).map(async (flokout) => {
+                console.log(`[DEBUG] Processing flokout ${flokout.id}: ${flokout.title}`);
                 // Get RSVP data
-                const { data: attendances } = await database_1.supabaseClient
+                const { data: attendances, error: attendanceError } = await database_1.supabaseClient
                     .from('attendances')
                     .select(`
               id,
               user_id,
               rsvp_status,
               attended,
-              profiles!inner(
+              profiles!attendances_user_id_fkey(
                 id,
                 full_name,
                 avatar_url
               )
             `)
                     .eq('flokout_id', flokout.id);
+                if (attendanceError) {
+                    console.error(`[DEBUG] Error fetching attendances for flokout ${flokout.id}:`, attendanceError);
+                }
+                else {
+                    console.log(`[DEBUG] Found ${attendances?.length || 0} attendances for flokout ${flokout.id}:`, attendances);
+                }
                 // Get flok members for poll status flokouts
                 let flokMembers = [];
                 if (flokout.status === 'poll') {
@@ -88,14 +108,22 @@ class FlokoutsController {
               `)
                         .eq('flok_id', flokout.flok_id);
                     flokMembers = members || [];
+                    console.log(`[DEBUG] Found ${flokMembers.length} flok members for flokout ${flokout.id}`);
                 }
-                return {
+                const result = {
                     ...flokout,
                     attendees: attendances || [],
                     flok_members: flokMembers,
                     rsvp_count: attendances?.filter(a => a.rsvp_status === 'yes').length || 0,
                     attendance_count: attendances?.filter(a => a.attended === true).length || 0
                 };
+                console.log(`[DEBUG] Final flokout data for ${flokout.id}:`, {
+                    id: result.id,
+                    title: result.title,
+                    attendees_count: result.attendees.length,
+                    rsvp_count: result.rsvp_count
+                });
+                return result;
             }));
             res.json({ flokouts: flokoutsWithRSVPData });
         }
@@ -164,6 +192,33 @@ class FlokoutsController {
             if (flokoutError) {
                 res.status(400).json({ error: flokoutError.message });
                 return;
+            }
+            // Automatically create attendance records for all flok members
+            const { data: flokMembers, error: membersError } = await database_1.supabaseClient
+                .from('flokmates')
+                .select('user_id')
+                .eq('flok_id', flok_id);
+            if (membersError) {
+                console.error('Failed to fetch flok members for attendance creation:', membersError);
+            }
+            else if (flokMembers && flokMembers.length > 0) {
+                // Create attendance records for all flok members with null RSVP status
+                const attendanceRecords = flokMembers.map(member => ({
+                    flokout_id: flokout.id,
+                    user_id: member.user_id,
+                    rsvp_status: null,
+                    attended: false
+                }));
+                const { error: attendanceError } = await database_1.supabaseClient
+                    .from('attendances')
+                    .insert(attendanceRecords);
+                if (attendanceError) {
+                    console.error('Failed to create attendance records:', attendanceError);
+                    // Don't fail the flokout creation if attendance records fail
+                }
+                else {
+                    console.log(`Created ${attendanceRecords.length} attendance records for flokout ${flokout.id}`);
+                }
             }
             res.status(201).json({
                 message: 'Flokout created successfully',
@@ -678,6 +733,81 @@ class FlokoutsController {
         }
         catch (error) {
             console.error('Get user attending flokouts error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+    /**
+     * Utility: Create missing attendance records for existing flokouts
+     * This helps fix flokouts created before we implemented auto-attendance creation
+     */
+    static async createMissingAttendanceRecords(req, res) {
+        try {
+            if (!req.user) {
+                res.status(401).json({ error: 'Not authenticated' });
+                return;
+            }
+            console.log('[UTIL] Starting to create missing attendance records...');
+            // Get all flokouts
+            const { data: allFlokouts, error: flokoutsError } = await database_1.supabaseClient
+                .from('flokouts')
+                .select('id, flok_id, title, status');
+            if (flokoutsError) {
+                res.status(500).json({ error: 'Failed to fetch flokouts' });
+                return;
+            }
+            let totalCreated = 0;
+            const results = [];
+            for (const flokout of allFlokouts || []) {
+                console.log(`[UTIL] Processing flokout ${flokout.id}: ${flokout.title}`);
+                // Check if attendance records exist
+                const { data: existingAttendances } = await database_1.supabaseClient
+                    .from('attendances')
+                    .select('id')
+                    .eq('flokout_id', flokout.id);
+                if (existingAttendances && existingAttendances.length > 0) {
+                    console.log(`[UTIL] Flokout ${flokout.id} already has ${existingAttendances.length} attendance records`);
+                    results.push({ flokout_id: flokout.id, status: 'has_records', count: existingAttendances.length });
+                    continue;
+                }
+                // Get flok members
+                const { data: flokMembers, error: membersError } = await database_1.supabaseClient
+                    .from('flokmates')
+                    .select('user_id')
+                    .eq('flok_id', flokout.flok_id);
+                if (membersError || !flokMembers || flokMembers.length === 0) {
+                    console.log(`[UTIL] No members found for flok ${flokout.flok_id}`);
+                    results.push({ flokout_id: flokout.id, status: 'no_members', count: 0 });
+                    continue;
+                }
+                // Create attendance records
+                const attendanceRecords = flokMembers.map(member => ({
+                    flokout_id: flokout.id,
+                    user_id: member.user_id,
+                    rsvp_status: null,
+                    attended: false
+                }));
+                const { error: attendanceError } = await database_1.supabaseClient
+                    .from('attendances')
+                    .insert(attendanceRecords);
+                if (attendanceError) {
+                    console.error(`[UTIL] Failed to create attendance records for flokout ${flokout.id}:`, attendanceError);
+                    results.push({ flokout_id: flokout.id, status: 'error', error: attendanceError.message });
+                }
+                else {
+                    console.log(`[UTIL] Created ${attendanceRecords.length} attendance records for flokout ${flokout.id}`);
+                    totalCreated += attendanceRecords.length;
+                    results.push({ flokout_id: flokout.id, status: 'created', count: attendanceRecords.length });
+                }
+            }
+            res.json({
+                message: 'Missing attendance records creation completed',
+                total_created: totalCreated,
+                processed_flokouts: results.length,
+                results
+            });
+        }
+        catch (error) {
+            console.error('Create missing attendance records error:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
     }

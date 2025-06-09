@@ -64,5 +64,23 @@ export declare class FloksController {
      * Verify invite code and get flok details (without joining)
      */
     static verifyInvite(req: AuthenticatedRequest, res: Response): Promise<void>;
+    /**
+     * Associate spot with flok
+     */
+    static associateSpot(req: AuthenticatedRequest, res: Response): Promise<void>;
+    /**
+     * Disassociate spot from flok
+     */
+    static disassociateSpot(req: AuthenticatedRequest, res: Response): Promise<void>;
+    /**
+     * Reactivate flok
+     */
+    static reactivateFlok(req: AuthenticatedRequest, res: Response): Promise<void>;
+    /**
+     * Permanently delete flok and associated data (purge)
+     * Preserves: spots (reusable), user profiles (owned by users)
+     * Deletes: flokouts, flok_spots associations, flokmates, invites, flok record
+     */
+    static purgeFlok(req: AuthenticatedRequest, res: Response): Promise<void>;
 }
 //# sourceMappingURL=floksController.d.ts.map

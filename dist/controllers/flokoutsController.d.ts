@@ -44,5 +44,10 @@ export declare class FlokoutsController {
      * Get flokouts user is attending
      */
     static getUserAttendingFlokouts(req: AuthenticatedRequest, res: Response): Promise<void>;
+    /**
+     * Utility: Create missing attendance records for existing flokouts
+     * This helps fix flokouts created before we implemented auto-attendance creation
+     */
+    static createMissingAttendanceRecords(req: AuthenticatedRequest, res: Response): Promise<void>;
 }
 //# sourceMappingURL=flokoutsController.d.ts.map

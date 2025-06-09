@@ -18,7 +18,9 @@ router.get('/', FloksController.getUserFloks);           // Get user's floks
 router.post('/', FloksController.createFlok);            // Create new flok
 router.get('/:id', FloksController.getFlokById);         // Get flok details
 router.put('/:id', FloksController.updateFlok);          // Update flok
-router.delete('/:id', FloksController.deleteFlok);       // Delete flok
+router.delete('/:id', FloksController.deleteFlok);       // Delete flok (deactivate)
+router.put('/:id/reactivate', FloksController.reactivateFlok); // Reactivate flok
+router.delete('/:id/purge', FloksController.purgeFlok);  // Permanently delete flok
 
 // Flok membership operations
 router.get('/:id/members', FloksController.getFlokMembers);     // Get flok members
@@ -26,6 +28,10 @@ router.post('/:id/join', FloksController.joinFlok);             // Join flok (wi
 router.post('/:id/leave', FloksController.leaveFlok);           // Leave flok
 router.delete('/:id/members/:userId', FloksController.removeMember); // Remove member (admin only)
 router.put('/:id/members/:userId/role', FloksController.updateMemberRole); // Update member role (admin only)
+
+// Flok spot associations
+router.post('/:id/spots', FloksController.associateSpot);
+router.delete('/:id/spots/:spotId', FloksController.disassociateSpot);
 
 // Flok invites
 router.post('/verify-invite', FloksController.verifyInvite);           // Verify invite code (get flok details)

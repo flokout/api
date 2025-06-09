@@ -812,7 +812,7 @@ export class FloksController {
       console.log('📧 Invite deactivated successfully');
       res.json({ message: 'Invite deactivated successfully' });
     } catch (error: any) {
-      console.error('📧 Deactivate invite error:', error);
+      console.error('Deactivate invite error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -905,6 +905,349 @@ export class FloksController {
 
     } catch (error: any) {
       console.error('📧 Verify invite error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Associate spot with flok
+   */
+  static async associateSpot(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id: flokId } = req.params;
+      const { spot_id } = req.body;
+
+      if (!spot_id) {
+        res.status(400).json({ error: 'Spot ID is required' });
+        return;
+      }
+
+      // Check if user is admin of this flok
+      const { data: membership } = await supabaseClient
+        .from('flokmates')
+        .select('role')
+        .eq('flok_id', flokId)
+        .eq('user_id', req.user.id)
+        .single();
+
+      if (!membership || membership.role !== 'admin') {
+        res.status(403).json({ error: 'Access denied. Admin role required.' });
+        return;
+      }
+
+      // Check if spot exists
+      const { data: spot, error: spotError } = await supabaseClient
+        .from('spots')
+        .select('id')
+        .eq('id', spot_id)
+        .single();
+
+      if (spotError || !spot) {
+        res.status(404).json({ error: 'Spot not found' });
+        return;
+      }
+
+      // Check if association already exists
+      const { data: existingAssociation } = await supabaseClient
+        .from('flok_spots')
+        .select('id')
+        .eq('flok_id', flokId)
+        .eq('spot_id', spot_id)
+        .single();
+
+      if (existingAssociation) {
+        res.status(400).json({ error: 'Spot is already associated with this flok' });
+        return;
+      }
+
+      // Create association
+      const { error: insertError } = await supabaseClient
+        .from('flok_spots')
+        .insert({
+          flok_id: flokId,
+          spot_id: spot_id,
+          created_by: req.user.id
+        });
+
+      if (insertError) {
+        console.error('Associate spot error:', insertError);
+        res.status(400).json({ error: 'Failed to associate spot with flok' });
+        return;
+      }
+
+      res.json({ message: 'Spot associated with flok successfully' });
+    } catch (error: any) {
+      console.error('Associate spot error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Disassociate spot from flok
+   */
+  static async disassociateSpot(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id: flokId, spotId } = req.params;
+
+      // Check if user is admin of this flok
+      const { data: membership } = await supabaseClient
+        .from('flokmates')
+        .select('role')
+        .eq('flok_id', flokId)
+        .eq('user_id', req.user.id)
+        .single();
+
+      if (!membership || membership.role !== 'admin') {
+        res.status(403).json({ error: 'Access denied. Admin role required.' });
+        return;
+      }
+
+      // Remove association
+      const { error: deleteError } = await supabaseClient
+        .from('flok_spots')
+        .delete()
+        .eq('flok_id', flokId)
+        .eq('spot_id', spotId);
+
+      if (deleteError) {
+        console.error('Disassociate spot error:', deleteError);
+        res.status(400).json({ error: 'Failed to disassociate spot from flok' });
+        return;
+      }
+
+      res.json({ message: 'Spot disassociated from flok successfully' });
+    } catch (error: any) {
+      console.error('Disassociate spot error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Reactivate flok
+   */
+  static async reactivateFlok(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+
+      // Check if user is admin of this flok
+      const { data: membership } = await supabaseClient
+        .from('flokmates')
+        .select('role')
+        .eq('flok_id', id)
+        .eq('user_id', req.user.id)
+        .single();
+
+      if (!membership || membership.role !== 'admin') {
+        res.status(403).json({ error: 'Access denied. Admin role required.' });
+        return;
+      }
+
+      // Check if flok is currently inactive
+      const { data: flok, error: flokError } = await supabaseClient
+        .from('floks')
+        .select('active')
+        .eq('id', id)
+        .single();
+
+      if (flokError || !flok) {
+        res.status(404).json({ error: 'Flok not found' });
+        return;
+      }
+
+      if (flok.active) {
+        res.status(400).json({ error: 'Flok is already active' });
+        return;
+      }
+
+      // Reactivate the flok
+      const { error: updateError } = await supabaseClient
+        .from('floks')
+        .update({ 
+          active: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (updateError) {
+        console.error('Reactivate flok error:', updateError);
+        res.status(400).json({ error: 'Failed to reactivate flok' });
+        return;
+      }
+
+      res.json({ message: 'Flok reactivated successfully' });
+    } catch (error: any) {
+      console.error('Reactivate flok error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Permanently delete flok and associated data (purge)
+   * Preserves: spots (reusable), user profiles (owned by users)
+   * Deletes: flokouts, flok_spots associations, flokmates, invites, flok record
+   */
+  static async purgeFlok(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+
+      // Check if user is admin of this flok
+      const { data: membership } = await supabaseClient
+        .from('flokmates')
+        .select('role')
+        .eq('flok_id', id)
+        .eq('user_id', req.user.id)
+        .single();
+
+      if (!membership || membership.role !== 'admin') {
+        res.status(403).json({ error: 'Access denied. Admin role required.' });
+        return;
+      }
+
+      // Check if flok exists and is inactive
+      const { data: flok, error: flokError } = await supabaseClient
+        .from('floks')
+        .select('active, name')
+        .eq('id', id)
+        .single();
+
+      if (flokError || !flok) {
+        res.status(404).json({ error: 'Flok not found' });
+        return;
+      }
+
+      if (flok.active) {
+        res.status(400).json({ error: 'Cannot purge active flok. Deactivate first.' });
+        return;
+      }
+
+      console.log(`🗑️ Starting purge of flok: ${flok.name} (${id})`);
+
+      // Start transaction-like cleanup (order matters due to foreign keys)
+      const cleanupResults = {
+        rsvps: 0,
+        flokouts: 0,
+        flok_spots: 0,
+        flok_invites: 0,
+        flokmates: 0,
+        flok: 0
+      };
+
+      // 1. Delete RSVPs for flokouts in this flok
+      const { data: flokoutIds } = await supabaseClient
+        .from('flokouts')
+        .select('id')
+        .eq('flok_id', id);
+
+      if (flokoutIds && flokoutIds.length > 0) {
+        const flokoutIdsList = flokoutIds.map(f => f.id);
+        
+        const { error: rsvpError } = await supabaseClient
+          .from('rsvps')
+          .delete()
+          .in('flokout_id', flokoutIdsList);
+
+        if (rsvpError) {
+          console.error('Error deleting RSVPs:', rsvpError);
+          res.status(500).json({ error: 'Failed to delete flokout RSVPs' });
+          return;
+        }
+        cleanupResults.rsvps = flokoutIdsList.length;
+      }
+
+      // 2. Delete flokouts
+      const { error: flokoutsError } = await supabaseClient
+        .from('flokouts')
+        .delete()
+        .eq('flok_id', id);
+
+      if (flokoutsError) {
+        console.error('Error deleting flokouts:', flokoutsError);
+        res.status(500).json({ error: 'Failed to delete flokouts' });
+        return;
+      }
+
+      // 3. Delete flok-spot associations (preserves spots for reuse)
+      const { error: flokSpotsError } = await supabaseClient
+        .from('flok_spots')
+        .delete()
+        .eq('flok_id', id);
+
+      if (flokSpotsError) {
+        console.error('Error deleting flok-spot associations:', flokSpotsError);
+        res.status(500).json({ error: 'Failed to delete spot associations' });
+        return;
+      }
+
+      // 4. Delete invites
+      const { error: invitesError } = await supabaseClient
+        .from('flok_invites')
+        .delete()
+        .eq('flok_id', id);
+
+      if (invitesError) {
+        console.error('Error deleting invites:', invitesError);
+        res.status(500).json({ error: 'Failed to delete invites' });
+        return;
+      }
+
+      // 5. Delete flokmates (preserves user profiles)
+      const { error: flokmatesError } = await supabaseClient
+        .from('flokmates')
+        .delete()
+        .eq('flok_id', id);
+
+      if (flokmatesError) {
+        console.error('Error deleting flokmates:', flokmatesError);
+        res.status(500).json({ error: 'Failed to delete members' });
+        return;
+      }
+
+      // 6. Finally, delete the flok record
+      const { error: flokDeleteError } = await supabaseClient
+        .from('floks')
+        .delete()
+        .eq('id', id);
+
+      if (flokDeleteError) {
+        console.error('Error deleting flok:', flokDeleteError);
+        res.status(500).json({ error: 'Failed to delete flok record' });
+        return;
+      }
+
+      console.log(`✅ Flok purged successfully:`, cleanupResults);
+
+      res.json({ 
+        message: 'Flok permanently deleted successfully',
+        cleaned: {
+          flokouts: cleanupResults.rsvps > 0 ? flokoutIds?.length || 0 : 0,
+          rsvps: cleanupResults.rsvps,
+          spots_associations: 'removed (spots preserved)',
+          members: 'removed (profiles preserved)',
+          invites: 'removed'
+        }
+      });
+    } catch (error: any) {
+      console.error('Purge flok error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

@@ -1,17 +1,21 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 /**
- * Expenses Controller - Complete Expense Management with Sharing and Settle Up
+ * Expenses Controller - Complete Expense Management with Global Tracking
  */
 export declare class ExpensesController {
     /**
-     * Get expenses with optional filters
+     * Get expenses with optional filters - supports global view across all floks
      */
     static getExpenses(req: AuthenticatedRequest, res: Response): Promise<void>;
     /**
-     * Create new expense with automatic share calculation
+     * Create expense with proper flokout_id relationship
      */
     static createExpense(req: AuthenticatedRequest, res: Response): Promise<void>;
+    /**
+     * Get global settle up data across all floks - simplified approach matching web app
+     */
+    static getSettleUp(req: AuthenticatedRequest, res: Response): Promise<void>;
     /**
      * Get expense by ID with shares
      */
@@ -24,10 +28,6 @@ export declare class ExpensesController {
      * Delete expense
      */
     static deleteExpense(req: AuthenticatedRequest, res: Response): Promise<void>;
-    /**
-     * Get settle up calculations for user
-     */
-    static getSettleUp(req: AuthenticatedRequest, res: Response): Promise<void>;
     /**
      * Mark settlement as sent (changes status to verifying)
      */

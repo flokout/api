@@ -18,9 +18,12 @@
 6. [Flokouts (Events)](#flokouts-events)
 7. [RSVPs (Attendance)](#rsvps-attendance)
 8. [Expenses (Cost Management)](#expenses-cost-management)
-9. [Usage Guidelines](#usage-guidelines)
-10. [Error Handling](#error-handling)
-11. [Testing Interface](#testing-interface)
+9. [Notifications (Real-time Updates)](#notifications-real-time-updates)
+10. [Feedback (User Input)](#feedback-user-input)
+11. [Metadata (Configuration)](#metadata-configuration)
+12. [Usage Guidelines](#usage-guidelines)
+13. [Error Handling](#error-handling)
+14. [Testing Interface](#testing-interface)
 
 ---
 
@@ -706,6 +709,230 @@ POST /api/expenses/settle-up/mark-received
 
 ---
 
+## 🔔 Notifications (Real-time Updates)
+
+### 1. Get User's Notifications
+```http
+GET /api/notifications?limit=50&offset=0
+```
+
+**Response:**
+```json
+{
+  "notifications": [
+    {
+      "id": "notification_uuid",
+      "user_id": "user_uuid",
+      "title": "New Flokout Created",
+      "message": "Basketball game this Saturday",
+      "type": "flokout_created",
+      "data": {
+        "flokout_id": "flokout_uuid",
+        "flok_id": "flok_uuid"
+      },
+      "read": false,
+      "created_at": "2025-01-03T12:00:00Z"
+    }
+  ]
+}
+```
+
+### 2. Get Unread Count
+```http
+GET /api/notifications/unread-count
+```
+
+**Response:**
+```json
+{
+  "unread_count": 5
+}
+```
+
+### 3. Mark Notification as Read
+```http
+PUT /api/notifications/:id/read
+```
+
+### 4. Mark All Notifications as Read
+```http
+PUT /api/notifications/mark-all-read
+```
+
+### 5. Register Push Token
+```http
+POST /api/notifications/register-token
+```
+
+**Request Body:**
+```json
+{
+  "push_token": "expo_push_token_here",
+  "platform": "ios"
+}
+```
+
+### 6. Create Notification (Testing)
+```http
+POST /api/notifications/create
+```
+
+**Request Body:**
+```json
+{
+  "title": "Test Notification",
+  "message": "This is a test message",
+  "type": "general"
+}
+```
+
+### 7. Delete Notification
+```http
+DELETE /api/notifications/:id
+```
+
+---
+
+## 💬 Feedback (User Input)
+
+### 1. Submit Feedback
+```http
+POST /api/feedback
+```
+
+**Request Body:**
+```json
+{
+  "category": "feature_request",
+  "subject": "Calendar Integration",
+  "message": "Would love to see Google Calendar sync",
+  "rating": 5
+}
+```
+
+**Categories:** `bug_report`, `feature_request`, `general`, `improvement`
+
+### 2. Get User's Feedback History
+```http
+GET /api/feedback?limit=20&offset=0
+```
+
+**Response:**
+```json
+{
+  "feedback": [
+    {
+      "id": "feedback_uuid",
+      "category": "feature_request",
+      "subject": "Calendar Integration", 
+      "message": "Would love to see Google Calendar sync",
+      "rating": 5,
+      "status": "submitted",
+      "created_at": "2025-01-03T12:00:00Z"
+    }
+  ]
+}
+```
+
+### 3. Get Feedback by ID
+```http
+GET /api/feedback/:id
+```
+
+### 4. Update Feedback
+```http
+PUT /api/feedback/:id
+```
+
+**Request Body:**
+```json
+{
+  "subject": "Updated Subject",
+  "message": "Updated message content",
+  "rating": 4
+}
+```
+
+**Permissions:** User can only update their own feedback
+
+### 5. Delete Feedback
+```http
+DELETE /api/feedback/:id
+```
+
+**Permissions:** User can only delete their own feedback
+
+### 6. Get All Feedback (Admin Only)
+```http
+GET /api/feedback/admin/all?category=bug_report&limit=50
+```
+
+**Response includes all user feedback with user details for admin review**
+
+---
+
+## 📊 Metadata (Configuration)
+
+### 1. Get Metadata by Type
+```http
+GET /api/metadata/types/:type
+```
+
+**Example:**
+```http
+GET /api/metadata/types/expense_categories
+```
+
+**Response:**
+```json
+{
+  "metadata": [
+    {
+      "id": "meta_uuid",
+      "type": "expense_categories",
+      "key": "court",
+      "value": "Court Rental",
+      "description": "Venue and court rental costs",
+      "active": true
+    }
+  ]
+}
+```
+
+### 2. Get All Metadata
+```http
+GET /api/metadata/all
+```
+
+### 3. Search Metadata
+```http
+GET /api/metadata/search?q=basketball&type=activity_types
+```
+
+### 4. Create Metadata
+```http
+POST /api/metadata
+```
+
+**Request Body:**
+```json
+{
+  "type": "activity_types",
+  "key": "volleyball",
+  "value": "Volleyball",
+  "description": "Indoor and beach volleyball activities",
+  "active": true
+}
+```
+
+**Metadata Types:**
+- `expense_categories`: Court, Equipment, Food, Transportation, Other
+- `activity_types`: Basketball, Tennis, Volleyball, Soccer, etc.
+- `notification_types`: System notification categories
+- `user_preferences`: Configuration options for users
+
+---
+
 ## 📖 Usage Guidelines
 
 ### 🔒 Authentication Flow
@@ -719,10 +946,13 @@ POST /api/expenses/settle-up/mark-received
    - Create flok → Generate invite codes → Members join
    
 2. **Plan Event:**
-   - Create spots → Create flokout → Members RSVP
+   - Create spots (with booking links) → Create flokout → Members RSVP → Get notifications
    
 3. **Manage Costs:**
-   - Add expenses → Auto-calculate shares → Settle up
+   - Add expenses → Auto-calculate shares → Settle up → Track payments
+   
+4. **Ongoing Management:**
+   - Monitor notifications → Collect user feedback → Configure metadata → Admin oversight
 
 ### 💡 Best Practices
 
@@ -756,9 +986,17 @@ GET /api/flokouts?flok_id=abc&status=poll&limit=10
 
 ### 🔄 Real-time Updates
 For live data, poll these endpoints:
+- Notifications: Every 15s for real-time updates
 - Flokout RSVPs: Every 30s during active voting
 - Expense settlements: Every 60s
 - New flokouts: Every 5 minutes
+- Unread notification count: Every 30s
+
+### 🔔 Push Notifications
+Register for push notifications:
+1. Get Expo push token from device
+2. Register token via `/api/notifications/register-token`
+3. Receive real-time push notifications for events
 
 ---
 
@@ -843,16 +1081,27 @@ Visit: `http://localhost:3000/test-api.html`
 |----------|-----------|--------------|
 | **Auth** | 5 | JWT tokens, refresh, user management |
 | **Floks** | 10 | Communities, invites, role management |
-| **Spots** | 7 | Venues, search, cost tracking |
+| **Spots** | 7 | Venues, search, cost tracking, booking links |
 | **Flokouts** | 11 | Events, status flow, attendance validation |
 | **RSVPs** | 5 | Yes/No/Maybe, grouped stats |
 | **Expenses** | 9 | Auto-sharing, smart settle-up, payment tracking |
+| **Notifications** | 7 | Real-time updates, push notifications, read status |
+| **Feedback** | 6 | User input, admin management, rating system |
+| **Metadata** | 4 | Dynamic configuration, extensible system |
 
-**Total: 47 Endpoints**
+**Total: 64 Endpoints**
 
 ---
 
 ## 🔄 Changelog
+
+### Version 1.1.0 (2025-01-03)
+- ✅ Added Notifications system with push support
+- ✅ Implemented Feedback collection and admin management
+- ✅ Created extensible Metadata configuration system
+- ✅ Enhanced Spots with booking links and descriptions
+- ✅ Updated documentation to reflect all 64 endpoints
+- ✅ Improved testing interface with new features
 
 ### Version 1.0.0 (2025-05-30)
 - ✅ Complete API implementation
@@ -876,4 +1125,4 @@ This is a living document. When updating APIs:
 ---
 
 **🎯 Ready for Production**  
-All APIs are production-ready with comprehensive error handling, security, and testing coverage. 
+All 64 APIs are production-ready with comprehensive error handling, security, real-time notifications, user feedback systems, and extensive testing coverage. The platform now includes advanced features for community management, real-time updates, and administrative oversight. 

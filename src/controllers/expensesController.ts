@@ -1,14 +1,15 @@
 import { Response } from 'express';
 import { supabaseAdmin, supabaseClient } from '../config/database';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { PushNotificationService } from '../services/pushNotificationService';
 
 /**
- * Expenses Controller - Complete Expense Management with Sharing and Settle Up
+ * Expenses Controller - Complete Expense Management with Global Tracking
  */
 
 export class ExpensesController {
   /**
-   * Get expenses with optional filters
+   * Get expenses with optional filters - supports global view across all floks
    */
   static async getExpenses(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
@@ -19,7 +20,7 @@ export class ExpensesController {
 
       console.log('📊 Getting expenses for user:', req.user.id);
 
-      const { flok_id, flokout_id, limit = 50, offset = 0, category } = req.query;
+      const { flok_id, flokout_id, limit = 50, offset = 0, category, global = false } = req.query;
 
       // Get user's floks to filter expenses
       const { data: userFloks, error: floksError } = await supabaseClient
@@ -42,10 +43,17 @@ export class ExpensesController {
       }
 
       // Get flokouts from user's floks
-      const { data: userFlokouts, error: flokoutsError } = await supabaseClient
+      let flokoutsQuery = supabaseClient
         .from('flokouts')
         .select('id')
         .in('flok_id', userFlokIds);
+
+      // Filter by specific flok if requested
+      if (flok_id) {
+        flokoutsQuery = flokoutsQuery.eq('flok_id', flok_id);
+      }
+
+      const { data: userFlokouts, error: flokoutsError } = await flokoutsQuery;
 
       if (flokoutsError) {
         console.error('Error fetching flokouts:', flokoutsError);
@@ -61,16 +69,16 @@ export class ExpensesController {
         return;
       }
 
-      // Build the expenses query without complex joins
+      // Build the expenses query using proper flokout_id field
       let expensesQuery = supabaseClient
         .from('expenses')
         .select('*')
-        .in('flok_id', flokoutIds)
+        .in('flokout_id', flokoutIds) // Fixed: use flokout_id instead of flok_id
         .order('created_at', { ascending: false })
         .range(Number(offset), Number(offset) + Number(limit) - 1);
 
       if (flokout_id) {
-        expensesQuery = expensesQuery.eq('flok_id', flokout_id);
+        expensesQuery = expensesQuery.eq('flokout_id', flokout_id);
       }
 
       if (category) {
@@ -99,7 +107,7 @@ export class ExpensesController {
         ...expenses.map(e => e.created_by)
       ]));
 
-      const flokoutIdsForDetails = Array.from(new Set(expenses.map(e => e.flok_id)));
+      const flokoutIdsForDetails = Array.from(new Set(expenses.map(e => e.flokout_id)));
 
       // Fetch users
       const { data: users } = await supabaseClient
@@ -122,47 +130,64 @@ export class ExpensesController {
       const { data: expenseShares } = await supabaseClient
         .from('expense_shares')
         .select(`
-          id, expense_id, user_id, amount, status, 
-          settled_at, settled_by, payment_method,
-          created_at, updated_at
+          *,
+          user:user_id(id, email, full_name, avatar_url)
         `)
         .in('expense_id', expenseIds);
 
-      // Get users for expense shares
-      const shareUserIds = Array.from(new Set(expenseShares?.map(s => s.user_id) || []));
-      const { data: shareUsers } = await supabaseClient
-        .from('profiles')
-        .select('id, email, full_name, avatar_url')
-        .in('id', shareUserIds);
-
       // Combine the data
-      const enrichedExpenses = expenses.map(expense => {
+      const expensesWithDetails = expenses.map(expense => {
         const payer = users?.find(u => u.id === expense.paid_by);
         const creator = users?.find(u => u.id === expense.created_by);
-        const flokout = flokoutsWithFloks?.find(f => f.id === expense.flok_id);
-        const shares = expenseShares?.filter(s => s.expense_id === expense.id).map(share => ({
-          ...share,
-          user: shareUsers?.find(u => u.id === share.user_id)
-        })) || [];
+        const flokout = flokoutsWithFloks?.find(f => f.id === expense.flokout_id);
+        const shares = expenseShares?.filter(s => s.expense_id === expense.id) || [];
 
         return {
           ...expense,
-          payer,
-          creator,
-          flokout,
+          payer: payer ? {
+            id: payer.id,
+            full_name: payer.full_name,
+            email: payer.email,
+            avatar_url: payer.avatar_url
+          } : null,
+          creator: creator ? {
+            id: creator.id,
+            full_name: creator.full_name,
+            email: creator.email,
+            avatar_url: creator.avatar_url
+          } : null,
+          flokout: flokout ? {
+            id: flokout.id,
+            title: flokout.title,
+            date: flokout.date,
+            floks: {
+              id: flokout.floks[0]?.id,
+              name: flokout.floks[0]?.name
+            },
+            spots: flokout.spots && flokout.spots[0] ? {
+              id: flokout.spots[0].id,
+              name: flokout.spots[0].name,
+              address: flokout.spots[0].address
+            } : null
+          } : null,
           expense_shares: shares
         };
       });
 
-      res.json({ expenses: enrichedExpenses });
-    } catch (error: any) {
-      console.error('Get expenses error:', error);
+      res.json({ 
+        expenses: expensesWithDetails,
+        total: expensesWithDetails.length,
+        global: global === 'true'
+      });
+
+    } catch (error) {
+      console.error('Error in getExpenses:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
 
   /**
-   * Create new expense with automatic share calculation
+   * Create expense with proper flokout_id relationship
    */
   static async createExpense(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
@@ -171,50 +196,77 @@ export class ExpensesController {
         return;
       }
 
-      const { 
-        flokout_id, 
-        description, 
-        amount, 
-        category, 
-        paid_by 
-      } = req.body;
+      console.log('📊 Creating expense for user:', req.user.id);
+      console.log('📊 Request body:', req.body);
 
-      if (!flokout_id || !amount || !paid_by) {
-        res.status(400).json({ 
-          error: 'flokout_id, amount, and paid_by are required' 
-        });
+      const { flokout_id, amount, description, category, paid_by } = req.body;
+
+      // Validate required fields
+      if (!flokout_id) {
+        res.status(400).json({ error: 'flokout_id is required' });
         return;
       }
 
-      // Validate amount
-      const amountNum = parseFloat(amount);
-      if (isNaN(amountNum) || amountNum <= 0) {
-        res.status(400).json({ error: 'Amount must be a positive number' });
+      if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+        res.status(400).json({ error: 'Valid amount is required' });
         return;
       }
 
-      // Get the flokout and check permissions
+      if (!paid_by) {
+        res.status(400).json({ error: 'paid_by is required' });
+        return;
+      }
+
+      const amountNum = Number(amount);
+
+      // Verify flokout exists and user has access
       const { data: flokout, error: flokoutError } = await supabaseClient
         .from('flokouts')
-        .select('id, flok_id')
+        .select(`
+          id,
+          title,
+          flok_id,
+          floks!inner(id, name)
+        `)
         .eq('id', flokout_id)
         .single();
 
       if (flokoutError || !flokout) {
-        res.status(404).json({ error: 'Flokout not found' });
+        console.error('Flokout access error:', flokoutError);
+        res.status(404).json({ 
+          error: 'Flokout not found.' 
+        });
         return;
       }
 
       // Check if user is a member of the flok
-      const { data: membership } = await supabaseClient
+      const { data: userMembership, error: membershipError } = await supabaseClient
         .from('flokmates')
-        .select('role')
+        .select('user_id, role')
         .eq('flok_id', flokout.flok_id)
         .eq('user_id', req.user.id)
         .single();
 
-      if (!membership) {
-        res.status(403).json({ error: 'Access denied. You are not a member of this flok.' });
+      if (membershipError || !userMembership) {
+        console.error('User membership check error:', membershipError);
+        res.status(403).json({ 
+          error: 'Access denied. You must be a member of this flok to add expenses.' 
+        });
+        return;
+      }
+
+      // Validate paid_by user is a member of the flok
+      const { data: payerMembership } = await supabaseClient
+        .from('flokmates')
+        .select('user_id')
+        .eq('flok_id', flokout.flok_id)
+        .eq('user_id', paid_by)
+        .single();
+
+      if (!payerMembership) {
+        res.status(400).json({ 
+          error: 'The person paying must be a member of this flok' 
+        });
         return;
       }
 
@@ -233,11 +285,11 @@ export class ExpensesController {
         }
       }
 
-      // Create the expense (note: flok_id field actually stores flokout_id due to schema naming)
+      // Create the expense with proper flokout_id
       const { data: expense, error: expenseError } = await supabaseClient
         .from('expenses')
         .insert({
-          flok_id: flokout_id, // This field actually references flokouts.id despite the name
+          flokout_id: flokout_id, // Correct field name
           amount: amountNum,
           description: description || 'Expense',
           category: category || 'other',
@@ -246,7 +298,7 @@ export class ExpensesController {
         })
         .select(`
           id,
-          flok_id,
+          flokout_id,
           amount,
           description,
           category,
@@ -303,6 +355,189 @@ export class ExpensesController {
 
     } catch (error) {
       console.error('Error in createExpense:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Get global settle up data across all floks - simplified approach matching web app
+   */
+  static async getSettleUp(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      console.log('📊 Getting settle up data for user:', req.user.id);
+
+      // Get full user profile for settle up
+      const { data: userProfile, error: profileError } = await supabaseClient
+        .from('profiles')
+        .select('id, full_name, email, venmo_id, zelle_id')
+        .eq('id', req.user.id)
+        .single();
+
+      if (profileError) {
+        console.error('Error fetching user profile:', profileError);
+        res.status(500).json({ error: 'Failed to fetch user profile' });
+        return;
+      }
+
+      // Get user's floks to filter expenses
+      const { data: userFloks, error: floksError } = await supabaseClient
+        .from('flokmates')
+        .select('flok_id')
+        .eq('user_id', req.user.id);
+
+      if (floksError) {
+        console.error('Error fetching user floks:', floksError);
+        res.status(500).json({ error: 'Failed to fetch user floks' });
+        return;
+      }
+
+      const userFlokIds = userFloks?.map(f => f.flok_id) || [];
+      
+      if (userFlokIds.length === 0) {
+        res.json({ settle_up_items: [], total_items: 0 });
+        return;
+      }
+
+      // Get flokouts from user's floks
+      const { data: userFlokouts, error: flokoutsError } = await supabaseClient
+        .from('flokouts')
+        .select('id')
+        .in('flok_id', userFlokIds);
+
+      if (flokoutsError) {
+        console.error('Error fetching flokouts:', flokoutsError);
+        res.status(500).json({ error: 'Failed to fetch flokouts' });
+        return;
+      }
+
+      const flokoutIds = userFlokouts?.map(f => f.id) || [];
+
+      if (flokoutIds.length === 0) {
+        res.json({ settle_up_items: [], total_items: 0 });
+        return;
+      }
+
+      // Step 1: Fetch expenses for these flokouts (matching web app pattern)
+      const { data: expenses, error: expensesError } = await supabaseClient
+        .from('expenses')
+        .select(`
+          *,
+          payer:profiles!expenses_paid_by_fkey(id, full_name, email, venmo_id, zelle_id)
+        `)
+        .in('flokout_id', flokoutIds);
+
+      if (expensesError) {
+        console.error('Error fetching expenses:', expensesError);
+        res.status(500).json({ error: 'Failed to fetch expenses' });
+        return;
+      }
+
+      if (!expenses || expenses.length === 0) {
+        res.json({ settle_up_items: [], total_items: 0 });
+        return;
+      }
+
+      // Step 2: Fetch expense shares for these expenses
+      const expenseIds = expenses.map(e => e.id);
+      const { data: expenseShares, error: sharesError } = await supabaseClient
+        .from('expense_shares')
+        .select(`
+          *,
+          user:profiles!expense_shares_user_id_fkey(id, full_name, email, venmo_id, zelle_id)
+        `)
+        .in('expense_id', expenseIds)
+        .neq('status', 'settled');
+
+      if (sharesError) {
+        console.error('Error fetching expense shares:', sharesError);
+        res.status(500).json({ error: 'Failed to fetch expense shares' });
+        return;
+      }
+
+      // Step 3: Calculate settle up (matching web app logic)
+      const balanceMap = new Map();
+
+      expenses?.forEach(expense => {
+        // When current user paid for others
+        if (expense.paid_by === req.user.id) {
+          expenseShares?.forEach(share => {
+            if (share.expense_id === expense.id && share.user_id !== req.user.id && share.status !== 'settled') {
+              const key = share.user_id;
+              const existing = balanceMap.get(key) || {
+                user: share.user,
+                netAmount: 0,
+                shareIds: [],
+                status: 'pending'
+              };
+              existing.netAmount += share.amount; // They owe current user (positive)
+              existing.shareIds.push(share.id);
+              if (share.status === 'verifying') existing.status = 'verifying';
+              balanceMap.set(key, existing);
+            }
+          });
+        }
+        
+        // When others paid for current user
+        if (expense.paid_by !== req.user.id) {
+          expenseShares?.forEach(share => {
+            if (share.expense_id === expense.id && share.user_id === req.user.id && share.status !== 'settled') {
+              const key = expense.paid_by;
+              const existing = balanceMap.get(key) || {
+                user: expense.payer,
+                netAmount: 0,
+                shareIds: [],
+                status: 'pending'
+              };
+              existing.netAmount -= share.amount; // Current user owes them (negative)
+              existing.shareIds.push(share.id);
+              if (share.status === 'verifying') existing.status = 'verifying';
+              balanceMap.set(key, existing);
+            }
+          });
+        }
+      });
+
+      // Step 4: Convert to settle up items format
+      const settleUpItems: any[] = [];
+      
+      balanceMap.forEach((balance, userId) => {
+        if (balance.netAmount !== 0) { // Remove zero balances
+          if (balance.netAmount > 0) {
+                         // Others owe current user
+             settleUpItems.push({
+               from: balance.user,
+               to: userProfile,
+               amount: balance.netAmount,
+               status: balance.status,
+               expense_share_ids: balance.shareIds
+             });
+           } else {
+             // Current user owes others
+             settleUpItems.push({
+               from: userProfile,
+               to: balance.user,
+               amount: Math.abs(balance.netAmount),
+               status: balance.status,
+               expense_share_ids: balance.shareIds
+             });
+          }
+        }
+      });
+
+      console.log('📊 Calculated settle up items:', settleUpItems.length);
+
+      res.json({
+        settle_up_items: settleUpItems,
+        total_items: settleUpItems.length
+      });
+
+    } catch (error) {
+      console.error('Error in getSettleUp:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -579,237 +814,6 @@ export class ExpensesController {
   }
 
   /**
-   * Get settle up calculations for user
-   */
-  static async getSettleUp(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ error: 'Not authenticated' });
-        return;
-      }
-
-      console.log('💰 Getting settle up for user:', req.user.id);
-
-      const { flok_id } = req.query;
-
-      // Get user's floks to calculate settle up
-      const { data: userFloks, error: floksError } = await supabaseClient
-        .from('flokmates')
-        .select('flok_id')
-        .eq('user_id', req.user.id);
-
-      if (floksError) {
-        console.error('Error fetching user floks for settle up:', floksError);
-        res.status(500).json({ error: 'Failed to fetch user floks' });
-        return;
-      }
-
-      let flokIds = userFloks?.map(f => f.flok_id) || [];
-
-      if (flok_id) {
-        flokIds = flokIds.filter(id => id === flok_id);
-      }
-
-      console.log('💰 Checking flok IDs:', flokIds);
-
-      if (flokIds.length === 0) {
-        res.json({ settle_up_items: [] });
-        return;
-      }
-
-      // Get flokouts from user's floks
-      const { data: flokouts, error: flokoutsError } = await supabaseClient
-        .from('flokouts')
-        .select('id')
-        .in('flok_id', flokIds);
-
-      if (flokoutsError) {
-        console.error('Error fetching flokouts for settle up:', flokoutsError);
-        res.status(500).json({ error: 'Failed to fetch flokouts' });
-        return;
-      }
-
-      const flokoutIds = flokouts?.map(f => f.id) || [];
-      console.log('💰 Checking flokout IDs:', flokoutIds.length);
-
-      if (flokoutIds.length === 0) {
-        res.json({ settle_up_items: [] });
-        return;
-      }
-
-      // Get all expense shares where current user is involved
-      // We'll get shares in two parts: where user owes money, and where user is owed money
-      
-      // First, get shares where current user owes money (user_id = current user)
-      const { data: owingShares, error: owingError } = await supabaseClient
-        .from('expense_shares')
-        .select(`
-          *,
-          expense:expense_id(*),
-          user:user_id(*)
-        `)
-        .eq('user_id', req.user.id)
-        .not('status', 'eq', 'settled');
-
-      if (owingError) {
-        console.error('Error fetching owing shares:', owingError);
-        res.status(500).json({ error: 'Failed to fetch owing shares' });
-        return;
-      }
-
-      // Second, get expenses where current user is the payer (to find who owes them)
-      const { data: paidExpenses, error: paidError } = await supabaseClient
-        .from('expenses')
-        .select(`
-          *,
-          expense_shares!inner(
-            *,
-            user:user_id(*)
-          )
-        `)
-        .eq('paid_by', req.user.id)
-        .not('expense_shares.status', 'eq', 'settled')
-        .neq('expense_shares.user_id', req.user.id); // Exclude self
-
-      if (paidError) {
-        console.error('Error fetching paid expenses:', paidError);
-        res.status(500).json({ error: 'Failed to fetch paid expenses' });
-        return;
-      }
-
-      // Combine and format the data
-      const expenseShares: any[] = [];
-
-      // Add owing shares
-      if (owingShares) {
-        owingShares.forEach(share => {
-          if (share.expense && flokoutIds.includes(share.expense.flok_id)) {
-            expenseShares.push({
-              ...share,
-              expense: {
-                ...share.expense,
-                paid_by: share.expense.paid_by,
-                payer: null // Will be fetched separately if needed
-              }
-            });
-          }
-        });
-      }
-
-      // Add owed shares (from paid expenses)
-      if (paidExpenses) {
-        paidExpenses.forEach(expense => {
-          if (flokoutIds.includes(expense.flok_id)) {
-            expense.expense_shares.forEach((share: any) => {
-              expenseShares.push({
-                ...share,
-                expense: {
-                  ...expense,
-                  payer: null // Will be fetched separately if needed
-                }
-              });
-            });
-          }
-        });
-      }
-
-      console.log('💰 Found expense shares:', expenseShares?.length || 0);
-
-      if (!expenseShares || expenseShares.length === 0) {
-        res.json({ settle_up_items: [] });
-        return;
-      }
-
-      // Process shares to create settle up items
-      const balances: Record<string, Record<string, { 
-        amount: number, 
-        shareIds: string[], 
-        status: 'pending' | 'verifying'
-      }>> = {};
-
-      // Initialize balance sheet
-      expenseShares.forEach((share: any) => {
-        const expense = share.expense;
-        if (!expense || !flokoutIds.includes(expense.flok_id)) return;
-
-        const payerId = expense.paid_by;
-        const debtorId = share.user_id;
-
-        // Skip if this is the same person
-        if (payerId === debtorId) return;
-
-        // Initialize objects if they don't exist
-        if (!balances[debtorId]) balances[debtorId] = {};
-        if (!balances[debtorId][payerId]) {
-          balances[debtorId][payerId] = { amount: 0, shareIds: [], status: 'pending' };
-        }
-
-        // Add amount and share ID
-        balances[debtorId][payerId].amount += share.amount;
-        balances[debtorId][payerId].shareIds.push(share.id);
-
-        // Update status - if any share is 'verifying', mark the whole item as verifying
-        if (share.status === 'verifying') {
-          balances[debtorId][payerId].status = 'verifying';
-        }
-      });
-
-      // Fetch all profiles for users in the balances
-      const userIds = new Set<string>();
-      
-      Object.keys(balances).forEach(debtorId => {
-        userIds.add(debtorId);
-        Object.keys(balances[debtorId]).forEach(payerId => {
-          userIds.add(payerId);
-        });
-      });
-
-      const { data: profilesData, error: profilesError } = await supabaseClient
-        .from('profiles')
-        .select('*')
-        .in('id', Array.from(userIds));
-
-      if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
-        res.status(500).json({ error: 'Failed to fetch user profiles' });
-        return;
-      }
-
-      // Create settle up items
-      const settleItems: any[] = [];
-
-      Object.keys(balances).forEach(debtorId => {
-        Object.keys(balances[debtorId]).forEach(payerId => {
-          const fromUser = profilesData?.find(p => p.id === debtorId);
-          const toUser = profilesData?.find(p => p.id === payerId);
-
-          if (fromUser && toUser && balances[debtorId][payerId].amount > 0) {
-            settleItems.push({
-              from: fromUser,
-              to: toUser,
-              amount: Number(balances[debtorId][payerId].amount.toFixed(2)),
-              expense_share_ids: balances[debtorId][payerId].shareIds,
-              status: balances[debtorId][payerId].status
-            });
-          }
-        });
-      });
-
-      // Filter settleItems to include only those involving the current user
-      const relevantItems = settleItems.filter(item => 
-        item.from.id === req.user?.id || item.to.id === req.user?.id
-      );
-
-      console.log('💰 Found settle up items:', relevantItems.length);
-
-      res.json({ settle_up_items: relevantItems });
-    } catch (error: any) {
-      console.error('Get settle up error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-
-  /**
    * Mark settlement as sent (changes status to verifying)
    */
   static async markAsSent(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -834,6 +838,35 @@ export class ExpensesController {
         return;
       }
 
+      // Get expense details for notifications before updating
+      const { data: expenseShares, error: fetchError } = await supabaseClient
+        .from('expense_shares')
+        .select(`
+          id,
+          user_id,
+          amount,
+          expense_id,
+          expenses!inner(
+            id,
+            description,
+            amount,
+            paid_by,
+            flokout_id,
+                       flokouts!inner(
+             id,
+             title,
+             attendances!inner(user_id, rsvp_status)
+           )
+          )
+        `)
+        .in('id', expense_share_ids)
+        .eq('user_id', req.user.id);
+
+      if (fetchError || !expenseShares) {
+        res.status(400).json({ error: 'Invalid expense share IDs' });
+        return;
+      }
+
       // Update expense shares to "verifying" status
       const { data: updatedShares, error: updateError } = await supabaseClient
         .from('expense_shares')
@@ -849,6 +882,72 @@ export class ExpensesController {
       if (updateError) {
         res.status(400).json({ error: updateError.message });
         return;
+      }
+
+      // Send payment notifications to recipients
+      try {
+        console.log('💰 Processing payment notifications for markAsSent...');
+        console.log('💰 Expense shares to process:', expenseShares?.length || 0);
+        
+        // Group by expense payer (recipient) and calculate total amounts
+        const paymentsByRecipient = expenseShares.reduce((acc: any, share: any) => {
+          const expense = share.expenses;
+          const recipientId = expense.paid_by;
+          
+          // Skip if same user
+          if (recipientId === req.user.id) return acc;
+          
+                     // Check if recipient has rsvp_status = 'yes' for this flokout
+           const recipientRsvp = expense.flokouts.attendances.find((attendance: any) => 
+             attendance.user_id === recipientId && attendance.rsvp_status === 'yes'
+           );
+          
+          if (!recipientRsvp) return acc; // Don't notify if not attending
+          
+          if (!acc[recipientId]) {
+            acc[recipientId] = {
+              recipientId,
+              totalAmount: 0,
+              expenseCount: 0,
+                             flokoutTitle: expense.flokouts.title,
+               paymentMethod: payment_method
+            };
+          }
+          
+          acc[recipientId].totalAmount += share.amount;
+          acc[recipientId].expenseCount += 1;
+          
+          return acc;
+        }, {});
+
+        // Send notifications to each recipient
+        console.log('💰 Payment recipients to notify:', Object.keys(paymentsByRecipient).length);
+        
+        for (const payment of Object.values(paymentsByRecipient)) {
+          const { recipientId, totalAmount, expenseCount, flokoutTitle, paymentMethod } = payment as any;
+          
+          console.log(`💰 Sending notification to ${recipientId} for $${totalAmount} via ${paymentMethod}`);
+          
+          // Only send if amount > 0
+          if (totalAmount > 0) {
+            const notificationSent = await PushNotificationService.sendToUser(
+              recipientId,
+              '💰 Payment Sent!',
+              `Payment of $${totalAmount.toFixed(2)} sent via ${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)} for ${flokoutTitle}`,
+              { 
+                type: 'payment_sent',
+                route: '/(tabs)/expenses',
+                amount: totalAmount,
+                payment_method: paymentMethod,
+                expense_count: expenseCount
+              }
+            );
+            console.log(`💰 Notification sent result: ${notificationSent}`);
+          }
+        }
+      } catch (notificationError) {
+        console.error('Error sending payment notifications:', notificationError);
+        // Don't fail the request if notifications fail
       }
 
       res.json({
@@ -913,11 +1012,84 @@ export class ExpensesController {
           updated_at: new Date().toISOString()
         })
         .in('id', expense_share_ids)
-        .select();
+        .select(`
+          id,
+          user_id,
+          amount,
+          expense_id,
+          expenses!inner(
+            id,
+            description,
+            amount,
+            paid_by,
+            flokout_id,
+            flokouts!inner(
+              id,
+              title,
+              attendances!inner(user_id, rsvp_status)
+            )
+          )
+        `);
 
       if (updateError) {
         res.status(400).json({ error: updateError.message });
         return;
+      }
+
+      // Send payment confirmation notifications to payers (users who paid us)
+      try {
+        // Group by payer and calculate total amounts
+        const confirmationsByPayer = updatedShares?.reduce((acc: any, share: any) => {
+          const payerId = share.user_id;
+          const expense = share.expenses;
+          
+          // Skip if same user
+          if (payerId === req.user.id) return acc;
+          
+                     // Check if payer has rsvp_status = 'yes' for this flokout
+           const payerRsvp = expense.flokouts.attendances.find((attendance: any) => 
+             attendance.user_id === payerId && attendance.rsvp_status === 'yes'
+           );
+          
+          if (!payerRsvp) return acc; // Don't notify if not attending
+          
+          if (!acc[payerId]) {
+            acc[payerId] = {
+              payerId,
+              totalAmount: 0,
+              expenseCount: 0,
+              flokoutTitle: expense.flokouts.title
+            };
+          }
+          
+          acc[payerId].totalAmount += share.amount;
+          acc[payerId].expenseCount += 1;
+          
+          return acc;
+        }, {}) || {};
+
+        // Send notifications to each payer
+        for (const confirmation of Object.values(confirmationsByPayer)) {
+          const { payerId, totalAmount, expenseCount, flokoutTitle } = confirmation as any;
+          
+          // Only send if amount > 0
+          if (totalAmount > 0) {
+            await PushNotificationService.sendToUser(
+              payerId,
+              '✅ Payment Confirmed!',
+              `Payment of $${totalAmount.toFixed(2)} confirmed as received for ${flokoutTitle}`,
+              { 
+                type: 'payment_received',
+                route: '/(tabs)/expenses',
+                amount: totalAmount,
+                expense_count: expenseCount
+              }
+            );
+          }
+        }
+      } catch (notificationError) {
+        console.error('Error sending payment confirmation notifications:', notificationError);
+        // Don't fail the request if notifications fail
       }
 
       res.json({

@@ -21,6 +21,9 @@ const flokouts_1 = __importDefault(require("./routes/flokouts"));
 const rsvps_1 = __importDefault(require("./routes/rsvps"));
 const expenses_1 = __importDefault(require("./routes/expenses"));
 const attendanceRoutes_1 = __importDefault(require("./routes/attendanceRoutes"));
+const notifications_1 = __importDefault(require("./routes/notifications"));
+const feedback_1 = __importDefault(require("./routes/feedback"));
+const metadata_1 = __importDefault(require("./routes/metadata"));
 /**
  * Flokout API Server
  *
@@ -28,7 +31,7 @@ const attendanceRoutes_1 = __importDefault(require("./routes/attendanceRoutes"))
  * It does NOT modify the database schema or web application
  */
 const app = (0, express_1.default)();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 // Security middleware
 app.use((0, helmet_1.default)({
     contentSecurityPolicy: false // Disable CSP for development
@@ -83,6 +86,9 @@ app.use('/api/flokouts', flokouts_1.default);
 app.use('/api/rsvps', rsvps_1.default);
 app.use('/api/expenses', expenses_1.default);
 app.use('/api/attendance', attendanceRoutes_1.default);
+app.use('/api/notifications', notifications_1.default);
+app.use('/api/feedback', feedback_1.default);
+app.use('/api/metadata', metadata_1.default);
 // API base endpoint
 app.get('/api', (req, res) => {
     res.json({
@@ -103,9 +109,13 @@ app.get('/api', (req, res) => {
                 get: 'GET /api/floks/:id',
                 update: 'PUT /api/floks/:id',
                 delete: 'DELETE /api/floks/:id',
+                reactivate: 'PUT /api/floks/:id/reactivate',
+                purge: 'DELETE /api/floks/:id/purge',
                 members: 'GET /api/floks/:id/members',
                 join: 'POST /api/floks/:id/join',
                 leave: 'POST /api/floks/:id/leave',
+                associateSpot: 'POST /api/floks/:id/spots',
+                disassociateSpot: 'DELETE /api/floks/:id/spots/:spotId',
                 createInvite: 'POST /api/floks/:id/invites',
                 getInvites: 'GET /api/floks/:id/invites'
             },
@@ -153,6 +163,29 @@ app.get('/api', (req, res) => {
                 getFlokoutAttendance: 'GET /api/attendance/flokout/:flokoutId',
                 getUserHistory: 'GET /api/attendance/user/history',
                 bulkMark: 'POST /api/attendance/flokout/:flokoutId/bulk'
+            },
+            notifications: {
+                list: 'GET /api/notifications',
+                unreadCount: 'GET /api/notifications/unread-count',
+                markAsRead: 'PUT /api/notifications/:id/read',
+                markAllAsRead: 'PUT /api/notifications/mark-all-read',
+                create: 'POST /api/notifications/create',
+                delete: 'DELETE /api/notifications/:id'
+            },
+            feedback: {
+                submit: 'POST /api/feedback',
+                list: 'GET /api/feedback',
+                get: 'GET /api/feedback/:id',
+                update: 'PUT /api/feedback/:id',
+                delete: 'DELETE /api/feedback/:id',
+                admin: 'GET /api/feedback/admin/all'
+            },
+            metadata: {
+                list: 'GET /api/metadata',
+                create: 'POST /api/metadata',
+                get: 'GET /api/metadata/:id',
+                update: 'PUT /api/metadata/:id',
+                delete: 'DELETE /api/metadata/:id'
             }
         }
     });

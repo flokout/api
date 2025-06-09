@@ -24,5 +24,7 @@ router.post('/:id/confirm', flokoutsController_1.FlokoutsController.confirmFloko
 router.get('/flok/:flokId', flokoutsController_1.FlokoutsController.getFlokoutsByFlok); // Get flokouts for specific flok
 router.get('/user/created', flokoutsController_1.FlokoutsController.getUserCreatedFlokouts); // Get user's created flokouts
 router.get('/user/attending', flokoutsController_1.FlokoutsController.getUserAttendingFlokouts); // Get flokouts user is attending
+// Utility routes
+router.post('/utils/create-missing-attendance', flokoutsController_1.FlokoutsController.createMissingAttendanceRecords); // Create missing attendance records
 exports.default = router;
 //# sourceMappingURL=flokouts.js.map
